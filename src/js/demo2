@@ -1,0 +1,344 @@
+// 发帖页面
+
+//=require mobile/framework7.min
+//=require mobile/app
+//=require jquery-2.1.4.min
+//=require mobile/upload
+
+
+$(function(){
+
+  // 图片处理功能
+  function PictureEdit(){
+
+    this.imageWrap = $('#J_upload_box');
+    this.uploadBtnWrap = $('#J_file_wrap');
+    this.btnGroup = $('#J_btn_group');
+    this.cropBox = $('#J_file_box');
+    this.preImg = $('#J_file_box_img');
+    this.cropImg = null;
+
+    this.uploadBtn = $('#J_file');
+    this.cropBtn = $('#J_crop');
+    this.cancelCropBtn = $('#J_cancel');
+    this.maxPics = 3;
+    this.pics = {};
+    this.cropOption = {
+       aspectRatio: 9 / 16,
+       guides: false,
+       cropBoxResizable: false,
+       cropBoxMovable: false,
+       dragCrop: false,
+       minContainerWidth: 200,
+       minContainerHeight: 200
+    };
+
+  }
+
+  // 选择上传图片
+  PictureEdit.prototype.upload = function(){
+    var that = this;
+
+    that.delPics();
+    that.crop();
+
+    this.uploadBtn.change(function(){
+        if (this.files.length === 0){
+          return;
+        }
+        var file = this.files[0];
+
+        window
+        .lrz(file,{width: 600}) // 展示预览图
+        .then(function (rst) {
+          that.showCropBox();
+
+          that.preImg.load(function(){
+            // 触发图像裁剪
+            that.preImg.cropper(that.cropOption);
+          });
+          that.preImg.attr('src',rst.base64);
+
+        })
+        .catch(function (err) {
+          myApp.alert('读取图像失败！',function(){
+            that.hideCropBox();
+          });
+        })
+        .always(function () {
+          myApp.hidePreloader();
+        });
+    });
+  };
+
+  // 显示裁剪框
+  PictureEdit.prototype.showCropBox = function(){
+    this.cropBox.show();
+    this.btnGroup.show();
+  };
+
+  // 隐藏裁剪框
+  PictureEdit.prototype.hideCropBox = function(){
+    this.cropBox.hide();
+    this.btnGroup.hide();
+    this.preImg.cropper('destroy');
+  };
+
+  // 处理上传图片(选择裁剪比例)
+  PictureEdit.prototype.changeCropScale = function(){
+
+  };
+
+  // 处理上传图片(裁剪，缩放)
+  PictureEdit.prototype.crop = function(){
+    var that = this;
+
+    // 取消裁剪
+    that.cancel();
+
+    // 确认裁剪
+    that.cropBtn.click(function(){
+      that.addPics();
+      that.hideCropBox();
+    });
+
+  };
+
+  // 取消上传图片
+  PictureEdit.prototype.cancel = function(){
+    var that = this;
+    that.cancelCropBtn.click(function(){
+      that.hideCropBox();
+    });
+  };
+
+  // 生成上传图片的key
+  PictureEdit.prototype.getFileKey = function(){
+    var str = '0123456789abcdefghijklmnopqrstuvwxyz',
+        n = str.length,
+        key = "",
+        i = 1;
+    while (i < n) {
+        var a = Math.floor(n * Math.random());
+        key += str.charAt(a);
+        i++;
+    }
+    return key
+  };
+
+  // 获取需要上传图片的数量
+  PictureEdit.prototype.getPicsCount = function(){
+    return this.imageWrap.find('.item').length;
+  };
+
+  // 检测图片数量是否超过限制
+  PictureEdit.prototype.checkPics = function(){
+    this.getPicsCount() >= this.maxPics ? this.uploadBtnWrap.hide() : this.uploadBtnWrap.show()
+  };
+
+  // 添加上传的图片
+  PictureEdit.prototype.addPics = function(){
+    var thumb = $('<div class="item"><i>x</i></div>'),
+        key = this.getFileKey(),
+        data = '';
+
+    this.cropImg = this.preImg.cropper('getCroppedCanvas', { width: 200, height: 200 });
+    data = this.cropImg.toDataURL();
+    thumb.css('backgroundImage','url('+data+')').attr('key',key);
+    thumb.insertBefore(this.uploadBtnWrap);
+    this.pics[key] = data.split(',').pop();
+
+    this.checkPics();
+
+  };
+
+  // 删除上传的图片
+  PictureEdit.prototype.delPics = function(){
+    var that = this;
+
+    that.imageWrap.on('click','i',function(){
+      var parent = $(this).parent('.item'),
+          key = parent.attr('key');
+
+      parent.remove();
+      that.checkPics();
+      delete that.pics[key];
+
+    });
+
+  };
+
+  // 获取全部base64数据
+  PictureEdit.prototype.getPicsData = function(){
+    var arr = [];
+    $.each(this.pics,function(i,n){
+      arr.push(n);
+    });
+    return arr.join(',');
+  };
+
+
+
+  // 发帖功能,（ 标题，正文内容，图片，二段发送ajax ）,发帖功能  继承自  上传
+
+  function Topic(){
+    this.title = $('#J_post_title');
+    this.content = $('#J_post_content');
+    this.submitBtn = $('#J_post_button');
+    this.categoryWrap = $('#J_category');
+    this.chooseCategoryBtn = $('#J_category_btn');
+    this.data = {
+      user_id: $('#J_user_id').attr('user_id'),
+      category_id: this.chooseCategoryBtn.data('category_id'),
+      title: '',
+      content: '',
+      has_pic: false
+    };
+
+    this.initEvent();
+  }
+
+  Topic.prototype = new PictureEdit();
+
+  // 初始化发帖事件
+  Topic.prototype.initEvent = function(){
+    this.posting();
+    this.upload();
+    this.chooseCategory();
+  };
+
+  // 发帖
+  Topic.prototype.posting = function(){
+    var that = this;
+
+    that.submitBtn.click(function(){
+      if(!that.regForm()){return};
+      myApp.showPreloader('发帖中...');
+
+      // 判断是否有图
+      that.data.has_pic = that.getPicsCount() ? true : false;
+
+      // 发送第一段ajax（文本）
+      that.postText();
+
+    });
+
+  };
+
+  // 发送帖子ajax
+  Topic.prototype.postText = function(){
+    var that = this;
+
+    $.ajax({
+      type: 'post',
+      url: '/common/user/topics',
+      data: that.data,
+      timeout: 3000,
+      beforeSend: function(request) {
+        request.setRequestHeader("Client-Type", "html5");
+      },
+      success: function(datas){
+        if(datas.response.state){
+          var topicID = datas.response.records.id;
+
+          // 如果有图片，则上传
+          if(that.data.has_pic){
+            that.postPics(topicID);
+          }else{// 没有图片，则结束
+            that.putDone(topicID);
+          }
+
+        }else{
+          myApp.alert('发帖失败，请稍后再试');
+          myApp.hidePreloader();
+        }
+      },
+      error: function(err){
+        myApp.alert('发帖失败，请稍后再试');
+        myApp.hidePreloader();
+      }
+    });
+
+
+  };
+
+  // 发送图片ajax
+  Topic.prototype.postPics = function(topicID){
+
+    var that = this,
+        data = {};
+
+    data.user_id = that.data.user_id;
+    data.pics = that.getPicsData();
+
+    $.ajax({
+      type: 'post',
+      url: '/common/user/topics/'+topicID+'/upload',
+      data: data,
+      timeout: 3000,
+      beforeSend: function(request) {
+        request.setRequestHeader("Client-Type", "html5");
+      },
+      success: function(datas){
+        if(datas.response.state){
+          that.putDone(topicID);
+        }else{
+          myApp.alert('发帖失败，请稍后再试');
+          myApp.hidePreloader();
+        }
+      },
+      error: function(err){
+        myApp.alert('发帖失败，请稍后再试');
+        myApp.hidePreloader();
+      }
+    });
+
+  };
+
+  // 发帖成功回调函数
+  Topic.prototype.putDone = function(topicID){
+    myApp.hidePreloader();
+    setTimeout(function(){
+      location.href='/topics/'+topicID;
+    },100);
+  };
+
+  // 切换版块分类
+  Topic.prototype.chooseCategory = function(){
+    var that = this;
+    that.categoryWrap.on('click','li',function(){
+      that.data.category_id = $(this).data('id');
+      that.chooseCategoryBtn.html($(this).text());
+      myApp.closeModal();
+    });
+
+  };
+
+  // 前端验证
+  Topic.prototype.regForm = function(){
+    var that = this,
+        title = that.title.val(),
+        content = that.content.val();
+
+    that.data.title =  title;
+    that.data.content =  content;
+
+    if(!that.data.category_id){
+      myApp.alert('请选择一个版块分类');
+      return false;
+    }
+    if(title.length > 60 || title.length < 2){
+      myApp.alert('请输入2-60个字的标题');
+      return false;
+    }
+    if(content.length > 500 || content.length < 2){
+      myApp.alert('请输入2-500个字的正文内容');
+      return false;
+    }
+
+    return true;
+  };
+
+  new Topic();
+
+});
