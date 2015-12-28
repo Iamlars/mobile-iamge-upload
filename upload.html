@@ -5,11 +5,28 @@
 	</head>
 	<body>
 		<h1>Upload Demo</h1>
-		<input type="file" id='input'>
+		<input type="file" id='input' accept="image/*" >
 		<button id="crop">Crop</button>
 		<div id="img-preview">
 			<img src=""  id="showImage" alt=""/>
 		</div>
+		#J_file_box
+img#J_file_box_img
+
+.crop-group#J_crop_group
+  label
+    input type="radio" name="scale" value="1/1"
+    span.active 1 : 1
+  label
+    input type="radio" name="scale" value="4/3" checked="checked"
+    span.active 4 : 3
+  label
+    input type="radio" name="scale" value="9/16"
+    span.active 9 : 16
+
+.btn-group#J_btn_group
+  span#J_cancel 取消
+  span#J_crop 裁剪
 		<script src="./dist/js/all.js"/></script>
 	</body>
 </html>
